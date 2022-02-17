@@ -5,6 +5,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"gorm.io/gorm/migrator"
+	"strings"
 )
 
 type Migrator struct {
@@ -96,7 +97,7 @@ func (m Migrator) HasTable(value interface{}) bool {
 	var count int64
 
 	m.RunWithValue(value, func(stmt *gorm.Statement) error {
-		return m.DB.Raw("SELECT * FROM USER_TABLES where table_name = ?", stmt.Table).Row().Scan(&count)
+		return m.DB.Raw("SELECT COUNT(*) FROM USER_TABLES WHERE TABLE_NAME = ?", stmt.Table).Row().Scan(&count)
 	})
 
 	return count > 0
@@ -164,7 +165,7 @@ func (m Migrator) HasIndex(value interface{}, name string) bool {
 		return m.DB.Raw(
 			"SELECT COUNT(*) FROM USER_INDEXES WHERE TABLE_NAME = ? AND INDEX_NAME = ?",
 			m.Migrator.DB.NamingStrategy.TableName(stmt.Table),
-			m.Migrator.DB.NamingStrategy.IndexName(stmt.Table, name),
+			strings.ToUpper(name),
 		).Row().Scan(&count)
 	})
 

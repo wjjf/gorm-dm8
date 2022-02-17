@@ -1,4 +1,4 @@
-module github.com/xiyichan/gorm-dm8
+module github.com/ximenhaoziye/gorm-dm8
 
 go 1.14
 
