@@ -11,6 +11,8 @@ import (
 	"gorm.io/gorm/migrator"
 	"gorm.io/gorm/schema"
 	"regexp"
+	"strconv"
+	"strings"
 )
 
 type Config struct {
@@ -52,66 +54,11 @@ func (d Dialector) Initialize(db *gorm.DB) (err error) {
 	return
 }
 
-const (
-	// ClauseOnConflict for clause.ClauseBuilder ON CONFLICT key
-	ClauseOnConflict = "ON CONFLICT"
-	// ClauseValues for clause.ClauseBuilder VALUES key
-	ClauseValues = "VALUES"
-	// ClauseValues for clause.ClauseBuilder FOR key
-	ClauseFor = "FOR"
-)
-
 func (d Dialector) ClauseBuilders() map[string]clause.ClauseBuilder {
 	clauseBuilders := map[string]clause.ClauseBuilder{
-		ClauseOnConflict: func(c clause.Clause, builder clause.Builder) {
-			onConflict, ok := c.Expression.(clause.OnConflict)
-			if !ok {
-				c.Build(builder)
-				return
-			}
-
-			builder.WriteString("ON DUPLICATE KEY UPDATE ")
-			if len(onConflict.DoUpdates) == 0 {
-				if s := builder.(*gorm.Statement).Schema; s != nil {
-					var column clause.Column
-					onConflict.DoNothing = false
-
-					if s.PrioritizedPrimaryField != nil {
-						column = clause.Column{Name: s.PrioritizedPrimaryField.DBName}
-					} else if len(s.DBNames) > 0 {
-						column = clause.Column{Name: s.DBNames[0]}
-					}
-
-					if column.Name != "" {
-						onConflict.DoUpdates = []clause.Assignment{{Column: column, Value: column}}
-					}
-				}
-			}
-
-			for idx, assignment := range onConflict.DoUpdates {
-				if idx > 0 {
-					builder.WriteByte(',')
-				}
-
-				builder.WriteQuoted(assignment.Column)
-				builder.WriteByte('=')
-				if column, ok := assignment.Value.(clause.Column); ok && column.Table == "excluded" {
-					column.Table = ""
-					builder.WriteString("VALUES(")
-					builder.WriteQuoted(column)
-					builder.WriteByte(')')
-				} else {
-					builder.AddVar(builder, assignment.Value)
-				}
-			}
-		},
-		ClauseValues: func(c clause.Clause, builder clause.Builder) {
-			if values, ok := c.Expression.(clause.Values); ok && len(values.Columns) == 0 {
-				builder.WriteString("VALUES()")
-				return
-			}
-			c.Build(builder)
-		},
+		"WHERE": d.RewriteWhere,
+		"LIMIT": d.RewriteLimit,
+		"SET":   d.RewriteSet,
 	}
 
 	return clauseBuilders
@@ -270,4 +217,132 @@ func (d Dialector) SavePoint(tx *gorm.DB, name string) error {
 
 func (d Dialector) RollbackTo(tx *gorm.DB, name string) error {
 	return tx.Exec("ROLLBACK TO SAVEPOINT " + name).Error
+}
+
+func (d Dialector) RewriteWhere(c clause.Clause, builder clause.Builder) {
+	if where, ok := c.Expression.(clause.Where); ok {
+		builder.WriteString(" WHERE ")
+
+		// Switch position if the first query expression is a single Or condition
+		for idx, expr := range where.Exprs {
+			if v, ok := expr.(clause.OrConditions); !ok || len(v.Exprs) > 1 {
+				if idx != 0 {
+					where.Exprs[0], where.Exprs[idx] = where.Exprs[idx], where.Exprs[0]
+				}
+				break
+			}
+		}
+
+		wrapInParentheses := false
+		for idx, expr := range where.Exprs {
+			if idx > 0 {
+				if v, ok := expr.(clause.OrConditions); ok && len(v.Exprs) == 1 {
+					builder.WriteString(" OR ")
+				} else {
+					builder.WriteString(" AND ")
+				}
+			}
+
+			if len(where.Exprs) > 1 {
+				switch v := expr.(type) {
+				case clause.OrConditions:
+					if len(v.Exprs) == 1 {
+						if e, ok := v.Exprs[0].(clause.Expr); ok {
+							sql := strings.ToLower(e.SQL)
+							wrapInParentheses = strings.Contains(sql, "and") || strings.Contains(sql, "or")
+						}
+					}
+				case clause.AndConditions:
+					if len(v.Exprs) == 1 {
+						if e, ok := v.Exprs[0].(clause.Expr); ok {
+							sql := strings.ToLower(e.SQL)
+							wrapInParentheses = strings.Contains(sql, "and") || strings.Contains(sql, "or")
+						}
+					}
+				case clause.Expr:
+					sql := strings.ToLower(v.SQL)
+					wrapInParentheses = strings.Contains(sql, "and") || strings.Contains(sql, "or")
+				}
+			}
+
+			if wrapInParentheses {
+				builder.WriteString(`(`)
+				expr.Build(builder)
+				builder.WriteString(`)`)
+				wrapInParentheses = false
+			} else {
+				if e, ok := expr.(clause.IN); ok {
+					if values, ok := e.Values[0].([]interface{}); ok {
+						if len(values) > 1 {
+							newExpr := clause.IN{
+								Column: expr.(clause.IN).Column,
+								Values: expr.(clause.IN).Values,
+							}
+							newExpr.Build(builder)
+							continue
+						}
+					}
+				}
+
+				expr.Build(builder)
+			}
+		}
+	}
+}
+
+func (d Dialector) DummyTableName() string {
+	return "DUAL"
+}
+
+func (d Dialector) RewriteLimit(c clause.Clause, builder clause.Builder) {
+	if limit, ok := c.Expression.(clause.Limit); ok {
+		if stmt, ok := builder.(*gorm.Statement); ok {
+			if _, ok := stmt.Clauses["ORDER BY"]; !ok {
+				s := stmt.Schema
+				builder.WriteString("ORDER BY ")
+				if s != nil && s.PrioritizedPrimaryField != nil {
+					builder.WriteQuoted(s.PrioritizedPrimaryField.DBName)
+					builder.WriteByte(' ')
+				} else {
+					builder.WriteString("(SELECT NULL FROM ")
+					builder.WriteString(d.DummyTableName())
+					builder.WriteString(")")
+				}
+			}
+		}
+
+		if offset := limit.Offset; offset > 0 {
+			builder.WriteString(" OFFSET ")
+			builder.WriteString(strconv.Itoa(offset))
+			builder.WriteString(" ROWS")
+		}
+		if limit := limit.Limit; limit > 0 {
+			builder.WriteString(" FETCH NEXT ")
+			builder.WriteString(strconv.Itoa(limit))
+			builder.WriteString(" ROWS ONLY")
+		}
+	}
+}
+
+func (d Dialector) RewriteSet(c clause.Clause, builder clause.Builder) {
+	if set, ok := c.Expression.(clause.Set); ok {
+		if len(set) > 0 {
+			builder.WriteString(" SET ")
+			for idx, assignment := range set {
+				if assignment.Column.Name == "ID" || assignment.Column.Name == "id" {
+					continue
+				}
+				if idx > 0 {
+					builder.WriteByte(',')
+				}
+				builder.WriteQuoted(assignment.Column)
+				builder.WriteByte('=')
+				builder.AddVar(builder, assignment.Value)
+			}
+		} else {
+			builder.WriteQuoted(clause.Column{Name: clause.PrimaryKey})
+			builder.WriteByte('=')
+			builder.WriteQuoted(clause.Column{Name: clause.PrimaryKey})
+		}
+	}
 }
