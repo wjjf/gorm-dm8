@@ -13,6 +13,7 @@ import (
 var db *gorm.DB
 
 type User struct {
+	ID                int
 	LoginName         string `gorm:"unique;not null;index" json:"login_name"`
 	Name              string `json:"name" gorm:"index"`
 	EncryptedPassword string `json:"encrypted_password"`
@@ -31,7 +32,6 @@ type User struct {
 	MXDeptID          int       `json:"mx_dept_id"`
 
 	NoAuth bool `json:"no_auth"`
-	ID     int
 }
 
 func TestDB(t *testing.T) {
