@@ -12,6 +12,11 @@ import (
 
 var db *gorm.DB
 
+type MenusUser struct {
+	UserID int `gorm:"not null;index" json:"user_id" form:"user_id" uri:"user_id"`
+	MenuID int `json:"menu_id" form:"menu_id" uri:"menu_id" gorm:"index"`
+}
+
 type User struct {
 	ID                int
 	LoginName         string `gorm:"unique;not null;index" json:"login_name"`
@@ -26,17 +31,18 @@ type User struct {
 	TokenSince        int       `json:"token_since"`
 	LoginFailedTimes  int       `json:"login_failed_times"`
 	LastLoginFailedAt time.Time `json:"last_login_failed_at"`
-	Phone             string    `json:"phone" gorm:"index"`
-	Title             string    `json:"title"`
-	MXUserID          int       `json:"mx_user_id"`
-	MXDeptID          int       `json:"mx_dept_id"`
 
-	NoAuth bool `json:"no_auth"`
+	Phone string `json:"phone" gorm:"index"`
+	Title string `json:"title"`
+
+	MXUserID int  `json:"mx_user_id"`
+	MXDeptID int  `json:"mx_dept_id"`
+	NoAuth   bool `json:"no_auth"`
 }
 
 func TestDB(t *testing.T) {
 	var err error
-	dsn := fmt.Sprintf("dm://%s:%s@%s:%s?&appName=%s", "SDP", "1111", "192.168.100.90", "5246", "SDP")
+	dsn := fmt.Sprintf("dm://%s:%s@%s:%s?&appName=%s", "SDP", "111", "192.168.100.90", "5246", "SDP")
 	gormLoggerFile, err := os.Create("./gorm.log")
 	if err != nil {
 		fmt.Println(err)
@@ -56,7 +62,7 @@ func TestDB(t *testing.T) {
 		return
 	}
 	var user User
-	db.First(&user, 2)
+	db.Where("id=?", 6).First(&user)
 	user.Name = "weihao"
-	db.Save(user)
+	db.Save(&user)
 }

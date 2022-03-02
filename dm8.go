@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	_ "gitee.com/chunanyong/dm"
+	"github.com/ximenhaoziye/gorm-dm8/clauses"
 	"gorm.io/gorm"
 	"gorm.io/gorm/callbacks"
 	"gorm.io/gorm/clause"
@@ -47,7 +48,9 @@ func (d Dialector) Initialize(db *gorm.DB) (err error) {
 			return err
 		}
 	}
-
+	if err = db.Callback().Create().Replace("gorm:create", Create); err != nil {
+		return
+	}
 	for k, v := range d.ClauseBuilders() {
 		db.ClauseBuilders[k] = v
 	}
@@ -58,7 +61,7 @@ func (d Dialector) ClauseBuilders() map[string]clause.ClauseBuilder {
 	clauseBuilders := map[string]clause.ClauseBuilder{
 		"WHERE": d.RewriteWhere,
 		"LIMIT": d.RewriteLimit,
-		"SET":   d.RewriteSet,
+		//"SET":   d.RewriteSet,
 	}
 
 	return clauseBuilders
@@ -274,7 +277,7 @@ func (d Dialector) RewriteWhere(c clause.Clause, builder clause.Builder) {
 				if e, ok := expr.(clause.IN); ok {
 					if values, ok := e.Values[0].([]interface{}); ok {
 						if len(values) > 1 {
-							newExpr := clause.IN{
+							newExpr := clauses.IN{
 								Column: expr.(clause.IN).Column,
 								Values: expr.(clause.IN).Values,
 							}
