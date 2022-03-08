@@ -61,7 +61,6 @@ func (d Dialector) ClauseBuilders() map[string]clause.ClauseBuilder {
 	clauseBuilders := map[string]clause.ClauseBuilder{
 		"WHERE": d.RewriteWhere,
 		"LIMIT": d.RewriteLimit,
-		//"SET":   d.RewriteSet,
 	}
 
 	return clauseBuilders
@@ -92,7 +91,8 @@ func (d Dialector) Migrator(db *gorm.DB) gorm.Migrator {
 	}
 }
 func (d Dialector) BindVarTo(writer clause.Writer, stmt *gorm.Statement, v interface{}) {
-	writer.WriteByte('?')
+	writer.WriteString("?")
+	//writer.WriteString(strconv.Itoa(len(stmt.Vars)))
 }
 
 func (d Dialector) QuoteTo(writer clause.Writer, str string) {
@@ -101,7 +101,6 @@ func (d Dialector) QuoteTo(writer clause.Writer, str string) {
 		continuousBacktick      int8
 		shiftDelimiter          int8
 	)
-
 	for _, v := range []byte(str) {
 		switch v {
 		case '`':
@@ -146,6 +145,7 @@ func (d Dialector) QuoteTo(writer clause.Writer, str string) {
 var numericPlaceholder = regexp.MustCompile("@p(\\d+)")
 
 func (d Dialector) Explain(sql string, vars ...interface{}) string {
+	sql = strings.ToUpper(sql)
 	return logger.ExplainSQL(sql, nil, `'`, vars...)
 }
 
@@ -323,31 +323,6 @@ func (d Dialector) RewriteLimit(c clause.Clause, builder clause.Builder) {
 			builder.WriteString(" FETCH NEXT ")
 			builder.WriteString(strconv.Itoa(limit))
 			builder.WriteString(" ROWS ONLY")
-		}
-	}
-}
-
-func (d Dialector) RewriteSet(c clause.Clause, builder clause.Builder) {
-	if set, ok := c.Expression.(clause.Set); ok {
-		if len(set) > 0 {
-			builder.WriteString(" SET ")
-			i := 0
-			for _, assignment := range set {
-				if assignment.Column.Name == "ID" || assignment.Column.Name == "id" {
-					continue
-				}
-				if i > 0 {
-					builder.WriteByte(',')
-				}
-				builder.WriteQuoted(assignment.Column)
-				builder.WriteByte('=')
-				builder.AddVar(builder, assignment.Value)
-				i++
-			}
-		} else {
-			builder.WriteQuoted(clause.Column{Name: clause.PrimaryKey})
-			builder.WriteByte('=')
-			builder.WriteQuoted(clause.Column{Name: clause.PrimaryKey})
 		}
 	}
 }
