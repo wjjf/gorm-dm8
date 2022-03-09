@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unsafe"
 )
 
 type Config struct {
@@ -91,6 +92,12 @@ func (d Dialector) Migrator(db *gorm.DB) gorm.Migrator {
 	}
 }
 func (d Dialector) BindVarTo(writer clause.Writer, stmt *gorm.Statement, v interface{}) {
+	p := unsafe.Pointer(&stmt.SQL)
+	type Builderp struct {
+		Addr *clause.Builder // of receiver, to detect copies by value
+		Buf  []byte
+	}
+	(*Builderp)(p).Buf = []byte(strings.ToUpper(stmt.SQL.String()))
 	writer.WriteString("?")
 	//writer.WriteString(strconv.Itoa(len(stmt.Vars)))
 }
@@ -145,7 +152,6 @@ func (d Dialector) QuoteTo(writer clause.Writer, str string) {
 var numericPlaceholder = regexp.MustCompile("@p(\\d+)")
 
 func (d Dialector) Explain(sql string, vars ...interface{}) string {
-	sql = strings.ToUpper(sql)
 	return logger.ExplainSQL(sql, nil, `'`, vars...)
 }
 
