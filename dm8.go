@@ -49,9 +49,9 @@ func (d Dialector) Initialize(db *gorm.DB) (err error) {
 			return err
 		}
 	}
-	if err = db.Callback().Create().Replace("gorm:create", Create); err != nil {
-		return
-	}
+	//if err = db.Callback().Create().Replace("gorm:create", Create); err != nil {
+	//	return
+	//}
 	for k, v := range d.ClauseBuilders() {
 		db.ClauseBuilders[k] = v
 	}
@@ -62,6 +62,7 @@ func (d Dialector) ClauseBuilders() map[string]clause.ClauseBuilder {
 	clauseBuilders := map[string]clause.ClauseBuilder{
 		"WHERE": d.RewriteWhere,
 		"LIMIT": d.RewriteLimit,
+		"SET":   d.RewriteSet,
 	}
 
 	return clauseBuilders
@@ -329,6 +330,29 @@ func (d Dialector) RewriteLimit(c clause.Clause, builder clause.Builder) {
 			builder.WriteString(" FETCH NEXT ")
 			builder.WriteString(strconv.Itoa(limit))
 			builder.WriteString(" ROWS ONLY")
+		}
+	}
+}
+
+func (d Dialector) RewriteSet(c clause.Clause, builder clause.Builder) {
+	if set, ok := c.Expression.(clause.Set); ok {
+		if len(set) > 0 {
+			builder.WriteString(" SET ")
+			for idx, assignment := range set {
+				if assignment.Column.Name == "ID" || assignment.Column.Name == "id" {
+					continue
+				}
+				if idx > 0 {
+					builder.WriteByte(',')
+				}
+				builder.WriteQuoted(assignment.Column)
+				builder.WriteByte('=')
+				builder.AddVar(builder, assignment.Value)
+			}
+		} else {
+			builder.WriteQuoted(clause.Column{Name: clause.PrimaryKey})
+			builder.WriteByte('=')
+			builder.WriteQuoted(clause.Column{Name: clause.PrimaryKey})
 		}
 	}
 }
