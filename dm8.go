@@ -339,16 +339,18 @@ func (d Dialector) RewriteSet(c clause.Clause, builder clause.Builder) {
 	if set, ok := c.Expression.(clause.Set); ok {
 		if len(set) > 0 {
 			builder.WriteString(" SET ")
-			for idx, assignment := range set {
+			i := 0
+			for _, assignment := range set {
 				if assignment.Column.Name == "ID" || assignment.Column.Name == "id" {
 					continue
 				}
-				if idx > 0 {
+				if i > 0 {
 					builder.WriteByte(',')
 				}
 				builder.WriteQuoted(assignment.Column)
 				builder.WriteByte('=')
 				builder.AddVar(builder, assignment.Value)
+				i++
 			}
 		} else {
 			builder.WriteQuoted(clause.Column{Name: clause.PrimaryKey})
