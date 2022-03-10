@@ -11,6 +11,7 @@ import (
 	"gorm.io/gorm/logger"
 	"gorm.io/gorm/migrator"
 	"gorm.io/gorm/schema"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -64,6 +65,10 @@ func (d Dialector) ClauseBuilders() map[string]clause.ClauseBuilder {
 		"LIMIT":       d.RewriteLimit,
 		"SET":         d.RewriteSet,
 		"ON CONFLICT": d.RewriteConfict,
+		"GROUP BY":    d.RewriteGroupby,
+		"ORDER BY":    d.RewriteOrderby,
+		"SELECT":      d.RewriteSelect,
+		"FROM":        d.RewriteFrom,
 	}
 
 	return clauseBuilders
@@ -105,6 +110,7 @@ func (d Dialector) BindVarTo(writer clause.Writer, stmt *gorm.Statement, v inter
 }
 
 func (d Dialector) QuoteTo(writer clause.Writer, str string) {
+	str = strings.ToUpper(str)
 	var (
 		underQuoted, selfQuoted bool
 		continuousBacktick      int8
@@ -347,6 +353,7 @@ func (d Dialector) RewriteSet(c clause.Clause, builder clause.Builder) {
 				if i > 0 {
 					builder.WriteByte(',')
 				}
+				assignment.Column.Name = strings.ToUpper(assignment.Column.Name)
 				builder.WriteQuoted(assignment.Column)
 				builder.WriteByte('=')
 				builder.AddVar(builder, assignment.Value)
@@ -402,4 +409,86 @@ func (d Dialector) RewriteConfict(c clause.Clause, builder clause.Builder) {
 	//	stmt.Build("MERGE", "WHEN MATCHED", "WHEN NOT MATCHED")
 	//}
 
+}
+
+func (d Dialector) RewriteGroupby(c clause.Clause, builder clause.Builder) {
+	if groupBy, ok := c.Expression.(clause.GroupBy); ok {
+		builder.WriteString(" GROUP BY ")
+		for idx, column := range groupBy.Columns {
+			if idx > 0 {
+				builder.WriteByte(',')
+			}
+			column.Name = strings.ToUpper(column.Name)
+			builder.WriteQuoted(column)
+		}
+
+		if len(groupBy.Having) > 0 {
+			builder.WriteString(" HAVING ")
+			clause.Where{Exprs: groupBy.Having}.Build(builder)
+		}
+	}
+}
+
+func (d Dialector) RewriteOrderby(c clause.Clause, builder clause.Builder) {
+	if orderBy, ok := c.Expression.(clause.OrderBy); ok {
+		builder.WriteString(" ORDER BY ")
+		for idx, column := range orderBy.Columns {
+			if idx > 0 {
+				builder.WriteByte(',')
+			}
+			column.Column.Name = strings.ToUpper(column.Column.Name)
+			builder.WriteQuoted(column.Column)
+			if column.Desc {
+				builder.WriteString(" DESC")
+			}
+		}
+	}
+}
+
+func (d Dialector) RewriteSelect(c clause.Clause, builder clause.Builder) {
+	if s, ok := c.Expression.(clause.Select); ok {
+		builder.WriteString(" SELECT ")
+		if len(s.Columns) > 0 {
+			if s.Distinct {
+				builder.WriteString("DISTINCT ")
+			}
+
+			for idx, column := range s.Columns {
+				if idx > 0 {
+					builder.WriteByte(',')
+				}
+				column.Name = strings.ToUpper(column.Name)
+				builder.WriteQuoted(column)
+			}
+		} else {
+			builder.WriteByte('*')
+		}
+	}
+}
+
+func (d Dialector) RewriteFrom(c clause.Clause, builder clause.Builder) {
+	if from, ok := c.Expression.(clause.From); ok {
+		builder.WriteString(" FROM ")
+		if len(from.Tables) > 0 {
+			for idx, table := range from.Tables {
+				if idx > 0 {
+					builder.WriteByte(',')
+				}
+				table.Name = strings.ToUpper(table.Name)
+				builder.WriteQuoted(table)
+			}
+		} else {
+			builder.WriteQuoted(clause.Table{Name: clause.CurrentTable})
+		}
+		for _, join := range from.Joins {
+			v := reflect.ValueOf(&join.Expression).Elem()
+			sqlstr := v.Elem().FieldByName("SQL").String()
+			tmp := reflect.New(v.Elem().Type()).Elem()
+			tmp.Set(v.Elem())
+			tmp.FieldByName("SQL").SetString(strings.ToUpper(sqlstr))
+			v.Set(tmp)
+			builder.WriteByte(' ')
+			join.Build(builder)
+		}
+	}
 }
