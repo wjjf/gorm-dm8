@@ -110,7 +110,6 @@ func (d Dialector) BindVarTo(writer clause.Writer, stmt *gorm.Statement, v inter
 }
 
 func (d Dialector) QuoteTo(writer clause.Writer, str string) {
-	str = strings.ToUpper(str)
 	var (
 		underQuoted, selfQuoted bool
 		continuousBacktick      int8
