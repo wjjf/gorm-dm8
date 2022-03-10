@@ -110,6 +110,7 @@ func (d Dialector) BindVarTo(writer clause.Writer, stmt *gorm.Statement, v inter
 }
 
 func (d Dialector) QuoteTo(writer clause.Writer, str string) {
+	str = strings.ToUpper(str)
 	var (
 		underQuoted, selfQuoted bool
 		continuousBacktick      int8
@@ -435,7 +436,9 @@ func (d Dialector) RewriteOrderby(c clause.Clause, builder clause.Builder) {
 			if idx > 0 {
 				builder.WriteByte(',')
 			}
-			column.Column.Name = strings.ToUpper(column.Column.Name)
+			if !isPkStr(column.Column.Name) {
+				column.Column.Name = strings.ToUpper(column.Column.Name)
+			}
 			builder.WriteQuoted(column.Column)
 			if column.Desc {
 				builder.WriteString(" DESC")
@@ -490,4 +493,8 @@ func (d Dialector) RewriteFrom(c clause.Clause, builder clause.Builder) {
 			join.Build(builder)
 		}
 	}
+}
+
+func isPkStr(str string) bool {
+	return str == clause.PrimaryKey
 }
