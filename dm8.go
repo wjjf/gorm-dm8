@@ -465,6 +465,8 @@ func (d Dialector) RewriteSelect(c clause.Clause, builder clause.Builder) {
 		} else {
 			builder.WriteByte('*')
 		}
+	} else {
+		c.Build(builder)
 	}
 }
 
