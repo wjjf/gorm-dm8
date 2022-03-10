@@ -60,9 +60,10 @@ func (d Dialector) Initialize(db *gorm.DB) (err error) {
 
 func (d Dialector) ClauseBuilders() map[string]clause.ClauseBuilder {
 	clauseBuilders := map[string]clause.ClauseBuilder{
-		"WHERE": d.RewriteWhere,
-		"LIMIT": d.RewriteLimit,
-		"SET":   d.RewriteSet,
+		"WHERE":       d.RewriteWhere,
+		"LIMIT":       d.RewriteLimit,
+		"SET":         d.RewriteSet,
+		"ON CONFLICT": d.RewriteConfict,
 	}
 
 	return clauseBuilders
@@ -355,4 +356,48 @@ func (d Dialector) RewriteSet(c clause.Clause, builder clause.Builder) {
 			builder.WriteQuoted(clause.Column{Name: clause.PrimaryKey})
 		}
 	}
+}
+
+func (d Dialector) RewriteConfict(c clause.Clause, builder clause.Builder) {
+	//stmt, _ := builder.(*gorm.Statement)
+	//values := callbacks.ConvertToCreateValues(stmt)
+	//s := stmt.Schema
+	//fx := funk.Contains(
+	//	funk.Map(values.Columns, func(c clause.Column) string { return c.Name }),
+	//	funk.Map(s.PrimaryFields, func(field *schema.Field) string { return field.DBName }),
+	//)
+	//if onConflict, ok := c.Expression.(clause.OnConflict); ok && fx {
+	//	stmt.AddClauseIfNotExists(clauses.Merge{
+	//		Using: []clause.Interface{
+	//			clause.Select{
+	//				Columns: funk.Map(values.Columns, func(column clause.Column) clause.Column {
+	//					// HACK: I can not come up with a better alternative for now
+	//					// I want to add a value to the list of variable and then capture the bind variable position as well
+	//					buf := bytes.NewBufferString("")
+	//					stmt.Vars = append(stmt.Vars, values.Values[0][funk.IndexOf(values.Columns, column)])
+	//					stmt.BindVarTo(buf, stmt, nil)
+	//
+	//					column.Alias = column.Name
+	//					// then the captured bind var will be the name
+	//					column.Name = buf.String()
+	//					return column
+	//				}).([]clause.Column),
+	//			},
+	//			clause.From{
+	//				Tables: []clause.Table{{Name: d.DummyTableName()}},
+	//			},
+	//		},
+	//		On: funk.Map(s.PrimaryFields, func(field *schema.Field) clause.Expression {
+	//			return clause.Eq{
+	//				Column: clause.Column{Table: stmt.Table, Name: field.DBName},
+	//				Value:  clause.Column{Table: clauses.MergeDefaultExcludeName(), Name: field.DBName},
+	//			}
+	//		}).([]clause.Expression),
+	//	})
+	//	stmt.AddClauseIfNotExists(clauses.WhenMatched{Set: onConflict.DoUpdates})
+	//	stmt.AddClauseIfNotExists(clauses.WhenNotMatched{Values: values})
+	//
+	//	stmt.Build("MERGE", "WHEN MATCHED", "WHEN NOT MATCHED")
+	//}
+
 }
