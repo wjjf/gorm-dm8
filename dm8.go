@@ -485,12 +485,14 @@ func (d Dialector) RewriteFrom(c clause.Clause, builder clause.Builder) {
 			builder.WriteQuoted(clause.Table{Name: clause.CurrentTable})
 		}
 		for _, join := range from.Joins {
-			v := reflect.ValueOf(&join.Expression).Elem()
-			sqlstr := v.Elem().FieldByName("SQL").String()
-			tmp := reflect.New(v.Elem().Type()).Elem()
-			tmp.Set(v.Elem())
-			tmp.FieldByName("SQL").SetString(strings.ToUpper(sqlstr))
-			v.Set(tmp)
+			if join.Expression != nil {
+				v := reflect.ValueOf(&join.Expression).Elem()
+				sqlstr := v.Elem().FieldByName("SQL").String()
+				tmp := reflect.New(v.Elem().Type()).Elem()
+				tmp.Set(v.Elem())
+				tmp.FieldByName("SQL").SetString(strings.ToUpper(sqlstr))
+				v.Set(tmp)
+			}
 			builder.WriteByte(' ')
 			join.Build(builder)
 		}
