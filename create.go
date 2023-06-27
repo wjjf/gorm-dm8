@@ -2,6 +2,7 @@ package gorm_dm8
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"github.com/thoas/go-funk"
 	"reflect"
@@ -136,7 +137,7 @@ func Create(db *gorm.DB) {
 							func(field *gormSchema.Field) {
 								switch insertTo.Kind() {
 								case reflect.Struct:
-									if err = field.Set(insertTo, stmt.Vars[boundVars[field.Name]].(sql.Out).Dest); err != nil {
+									if err = field.Set(context.Background(), insertTo, stmt.Vars[boundVars[field.Name]].(sql.Out).Dest); err != nil {
 										db.AddError(err)
 									}
 								case reflect.Map:
